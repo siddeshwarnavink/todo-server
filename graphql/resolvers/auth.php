@@ -58,11 +58,34 @@ return [
         }
     },
 
+    'adminLogin' => function($root, $args) {
+      $user = User::where('email', $args['email'])->where('isAdmin', true)->first();
+
+      if($user) {
+          if(password_verify($args['password'], $user->password)) {
+              $key = require('./shared/JWTKey.php');
+
+              $jwt = JWT::encode([
+                  'user' => $user
+              ], $key);
+
+              return [
+                  'userId' => $user->id,
+                  'token' => $jwt
+              ];
+          } else {
+              throw new Exception('Invalid password!');
+          }
+      } else {
+          throw new Exception('User dosen`t exists!');
+      }
+    },
+
 
     'validToken' => function($root, $args) {
         $key = require('./shared/JWTKey.php');
         $decoded = JWT::decode($args['token'], $key, array('HS256'));
-        
+
         if($decoded) {
             $user = User::where('id', $decoded->user->id)->first();
 

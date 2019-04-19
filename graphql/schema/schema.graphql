@@ -73,6 +73,7 @@ type Report {
 
 type RootQuery {
   login(email: String!, password: String!): AuthData
+  adminLogin(email: String!, password: String!): AuthData
   validToken(token: String!): ValidateToken
   user(id: Int!): User
 
