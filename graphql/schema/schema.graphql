@@ -25,7 +25,7 @@ type TaskMember {
 }
 
 type Task {
-  id: Int!
+  id: Int
   title: String!
   description: String!
   creator: User!

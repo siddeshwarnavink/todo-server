@@ -19,35 +19,38 @@ return [
             'groupId' => $args['groupId'],
         ];
 
-        $validation = $root['validator']()->validate($taskData, [
-            'title' => v::notEmpty(),
-            'description' => v::notEmpty(),
-            'starts_at' => v::notEmpty(),
-            'ends_at' => v::notEmpty(),
-            'groupId' => v::notEmpty()->numeric(),
-        ]);
-
-        if($validation->failed()) {
-            throw new Exception('Invalid user input!');
+        if($args['groupId'] != 0) {
+            $validation = $root['validator']()->validate($taskData, [
+                'title' => v::notEmpty(),
+                'description' => v::notEmpty(),
+                'starts_at' => v::notEmpty(),
+                'ends_at' => v::notEmpty(),
+                'groupId' => v::notEmpty()->numeric(),
+            ]);
+    
+            if($validation->failed()) {
+                throw new Exception('Invalid user input!');
+            }
         }
 
         Task::create($taskData);
-        $currentTask = Task::orderBy('created_at', 'desc')->first();
+        if($args['groupId'] != 0) {
+            $currentTask = Task::orderBy('created_at', 'desc')->first();
 
-        $updateMember = [];
+            $updateMember = [];
 
-        foreach(json_decode($args['members']) as $memberId) {
-            $updateMember[] = [
-                'task_id' => $currentTask->id,
-                'user_id' => $memberId,
-                'completed' => 0
-            ];
+            foreach(json_decode($args['members']) as $memberId) {
+                $updateMember[] = [
+                    'task_id' => $currentTask->id,
+                    'user_id' => $memberId,
+                    'completed' => 0
+                ];
 
-            notify('notes', 'You have been assigned a task', "/task/{$currentTask->id}" , $memberId);
+                notify('notes', 'You have been assigned a task', "/task/{$currentTask->id}" , $memberId);
+            }
+
+            DB::table('task_user')->insert($updateMember);
         }
-
-        DB::table('task_user')->insert($updateMember);
-
         return true;
     },
 
@@ -56,19 +59,25 @@ return [
 
         $tasks = [];
 
-        if($root['isAuth']->user->isAdmin) {
+        if($root['isAuth']->user->isAdmin && $args['groupId'] != 0) {
             $tasks = Task::where('groupId', $args['groupId'])->get();
         } else {
-            $relationTasks = DB::table('task_user')->where('user_id', $root['isAuth']->user->id)->get();
-            $raw_tasks = [];
+            if ($args['groupId'] == 0) {
+                $tasks = Task::where('groupId', 0)
+                    ->where('creator', $root['isAuth']->user->id)
+                    ->get();
+            } else {
+                $relationTasks = DB::table('task_user')->where('user_id', $root['isAuth']->user->id)->get();
+                $raw_tasks = [];
 
-            foreach($relationTasks as $relationTask) {
-                $raw_tasks[] = Task::where('id', $relationTask->task_id)
-                                ->where('groupId', $args['groupId'])
-                                ->first();
+                foreach($relationTasks as $relationTask) {
+                        $raw_tasks[] = Task::where('groupId', $args['groupId'])
+                                        ->where('id', $relationTask->task_id)
+                                        ->first();
+                }
+
+                $tasks = array_merge($tasks, $raw_tasks);
             }
-
-            $tasks = array_merge($tasks, $raw_tasks);
         }
 
 
@@ -100,24 +109,33 @@ return [
 
     'completeTask' => function($root, $args) {
 
-        $taskRelation = DB::table('task_user')
+        $task = Task::where('id', $args['taskId']);
+        
+        if($task->first()->groupId != 0) {
+            $taskRelation = DB::table('task_user')
                         ->where('task_id', $args['taskId'])
                         ->where('user_id', $root['isAuth']->user->id)
                         ->first();
 
-        DB::table('task_user')
-            ->where('id', $taskRelation->id)
-            ->update(['completed' => 1]);
+            DB::table('task_user')
+                ->where('id', $taskRelation->id)
+                ->update(['completed' => 1]);
 
-        $taskCreator = Task::where('id', $args['taskId'])->first()->creator;
+            $taskCreator = $task->first()->creator;
 
-        notify('done', $root['isAuth']->user->username . ' has completed assigned task!', "/task/{$args['taskId']}" , $taskCreator);
+            notify('done', $root['isAuth']->user->username . ' has completed assigned task!', "/task/{$args['taskId']}" , $taskCreator);
+
+        } else {
+            $task->delete();
+        }
 
         return true;
     },
 
     'editTask' => function($root, $args) {
         AuthRequired($root);
+
+        $task = Task::where('id', $args['id']);
 
         $taskData = [
             'title' => $args['title'],
@@ -127,55 +145,58 @@ return [
             'groupId' => $args['groupId'],
         ];
 
-        $validation = $root['validator']()->validate($taskData, [
-            'title' => v::notEmpty(),
-            'description' => v::notEmpty(),
-            'starts_at' => v::notEmpty(),
-            'ends_at' => v::notEmpty(),
-            'groupId' => v::notEmpty()->numeric(),
-        ]);
+        if ($task->first()->groupId != 0) {
+            $validation = $root['validator']()->validate($taskData, [
+                'title' => v::notEmpty(),
+                'description' => v::notEmpty(),
+                'starts_at' => v::notEmpty(),
+                'ends_at' => v::notEmpty(),
+                'groupId' => v::notEmpty()->numeric(),
+            ]);
 
-        if($validation->failed()) {
-            throw new Exception('Invalid user input!');
+            if($validation->failed()) {
+                throw new Exception('Invalid user input!');
+            }
         }
 
-        $task = Task::where('id', $args['id']);
         $task->update($taskData);
 
-        $currentTaskMembers = taskMember($args['id']);
+        if ($task->first()->groupId != 0) {
+            $currentTaskMembers = taskMember($args['id']);
 
-        $insertList = [];
-        $removeList = [];
+            $insertList = [];
+            $removeList = [];
 
-        $members = json_decode($args['members']);
+            $members = json_decode($args['members']);
 
-        foreach($members as $newMemberId) {
-            if(!in_array($newMemberId, $currentTaskMembers)) {
-                $insertList[] = [
-                    'task_id' => $args['id'],
-                    'user_id' => $newMemberId,
-                    'completed' => 0
-                ];
+            foreach($members as $newMemberId) {
+                if(!in_array($newMemberId, $currentTaskMembers)) {
+                    $insertList[] = [
+                        'task_id' => $args['id'],
+                        'user_id' => $newMemberId,
+                        'completed' => 0
+                    ];
 
-                notify('notes', 'You have been assigned a task', "/task/{$args['id']}" , $newMemberId);
+                    notify('notes', 'You have been assigned a task', "/task/{$args['id']}" , $newMemberId);
+                }
             }
-        }
 
-        DB::table('task_user')->insert($insertList);
+            DB::table('task_user')->insert($insertList);
 
-        foreach($currentTaskMembers as $memberId) {
-            if(!in_array($memberId, $members)) {
-                $removeList[] = $memberId;
+            foreach($currentTaskMembers as $memberId) {
+                if(!in_array($memberId, $members)) {
+                    $removeList[] = $memberId;
+                }
             }
-        }
 
-        foreach($removeList as $removeUID) {
-            DB::table('task_user')
-                ->where('task_id', $args['id'])
-                ->where('user_id', $removeUID)
-                ->delete();
+            foreach($removeList as $removeUID) {
+                DB::table('task_user')
+                    ->where('task_id', $args['id'])
+                    ->where('user_id', $removeUID)
+                    ->delete();
 
-            notify('remove_circle_outline', 'You have been removed from a task', "/task/{$args['id']}" , $removeUID);
+                notify('remove_circle_outline', 'You have been removed from a task', "/task/{$args['id']}" , $removeUID);
+            }
         }
 
         return true;

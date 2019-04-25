@@ -33,18 +33,21 @@ function transformGroup($group) {
 }
 
 function transformTask($task, $userId) {
-    $task['creator'] = $task->creator();
-    if($task['groupId'] !== 0) {
+    if($task['groupId'] != 0) {
+        $task['creator'] = $task->creator();
         $group = Group::where('id', $task['groupId'])->first();
         $task['group'] = transformGroup($group);
+        $task['members'] = $task->members();
+        $task['completed'] = $task->isCompleted($userId);
+        $task['taskDone'] = $task->isDone();
     } else {
-        $task['group'] = $task['groupId'];
+        $task['group'] = null;
+        $task['completed'] = (bool) DB::table('task_user')
+            ->where('task_id', $task['id'])
+            ->where('user_id', $userId)
+            ->first()['completed'];
+        $task['creator'] = User::find($userId);
     }
-    unset($task['groupId']);
-
-    $task['members'] = $task->members();
-    $task['completed'] = $task->isCompleted($userId);
-    $task['taskDone'] = $task->isDone();
 
     return $task;
 }
