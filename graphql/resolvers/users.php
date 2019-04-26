@@ -14,10 +14,19 @@ return [
     'editUser' => function($root, $args) {
         $user = User::where('id', $args['userId']);
         
-        $user->update([
-            'username' => $args['username'],
-            'isAdmin' => (int) $args['isAdmin']
-        ]);
+
+        if (trim($args['newPassword']) == '') {
+            $user->update([
+                'username' => $args['username'],
+                'isAdmin' => (int) $args['isAdmin']
+            ]);
+        } else {
+            $user->update([
+                'username' => $args['username'],
+                'isAdmin' => (int) $args['isAdmin'],
+                'password' => password_hash($args['newPassword'], PASSWORD_BCRYPT)
+            ]);
+        }
 
         return $user->first();
     },

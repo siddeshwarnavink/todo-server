@@ -103,7 +103,7 @@ type RootMutation {
   ): Boolean
   deleteGroup(id: Int!): Boolean
 
-  editUser(userId: Int!, username: String!, isAdmin: Boolean): User
+  editUser(userId: Int!, username: String!, isAdmin: Boolean, newPassword: String): User
   addUser(
     username: String!
     email: String!
