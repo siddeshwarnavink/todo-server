@@ -45,8 +45,8 @@ return [
                     'user_id' => $memberId,
                     'completed' => 0
                 ];
-
-                notify('notes', "{strtoupper($currentTask->title)}. {$currentTask->description}", "/task/{$currentTask->id}" , $memberId);
+                
+                notify('notes', strtoupper($currentTask->title) . ". {$currentTask->description}", "/task/{$currentTask->id}" , $memberId);
             }
 
             DB::table('task_user')->insert($updateMember);
