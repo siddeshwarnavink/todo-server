@@ -1,4 +1,4 @@
-<?php
+d<?php
 
 use Siddeshrocks\Models\Task;
 
@@ -27,7 +27,7 @@ return [
                 'ends_at' => v::notEmpty(),
                 'groupId' => v::notEmpty()->numeric(),
             ]);
-    
+
             if($validation->failed()) {
                 throw new Exception('Invalid user input!');
             }
@@ -60,34 +60,25 @@ return [
         $tasks = [];
 
         if($root['isAuth']->user->isAdmin && $args['groupId'] != 0) {
-            $tasks = Task::where('groupId', $args['groupId'])->get();
+            $tasks = Task::where('groupId', (int) $args['groupId'])->get();
         } else {
             if ($args['groupId'] == 0) {
                 $tasks = Task::where('groupId', 0)
                     ->where('creator', $root['isAuth']->user->id)
                     ->get();
             } else {
-                $relationTasks = DB::table('task_user')->where('user_id', $root['isAuth']->user->id)->get();
-                $raw_tasks = [];
-
-                foreach($relationTasks as $relationTask) {
-                        $raw_tasks[] = Task::where('groupId', $args['groupId'])
-                                        ->where('id', $relationTask->task_id)
-                                        ->first();
-                }
-
-                $tasks = array_merge($tasks, $raw_tasks);
+                $tasks = DB::table('task_user')
+                    ->where('user_id', $root['isAuth']->user->id)
+                    ->join('tasks', 'task_user.task_id', '=', 'tasks.id')
+                    ->get();
             }
         }
 
-
-        $transformedTasks = [];
-
-        foreach($tasks as $task) {
-            $transformedTasks[] = transformTask($task, $root['isAuth']->user->id);
+        foreach($tasks as $i => $task) {
+            $tasks[$i] = transformTask($task, $root['isAuth']->user->id);
         }
 
-        return $transformedTasks;
+        return $tasks;
     },
 
     'task' => function($root, $args) {
@@ -110,7 +101,7 @@ return [
     'completeTask' => function($root, $args) {
 
         $task = Task::where('id', $args['taskId']);
-        
+
         if($task->first()->groupId != 0) {
             $taskRelation = DB::table('task_user')
                         ->where('task_id', $args['taskId'])
