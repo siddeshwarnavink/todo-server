@@ -46,7 +46,7 @@ return [
                     'completed' => 0
                 ];
                 
-                notify('notes', strtoupper($currentTask->title) . ". {$currentTask->description}", "/task/{$currentTask->id}" , $memberId);
+                notify('notes', 'You have been assigned a task', "/task/{$currentTask->id}" , $memberId);
             }
 
             DB::table('task_user')->insert($updateMember);
